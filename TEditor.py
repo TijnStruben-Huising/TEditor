@@ -1,5 +1,5 @@
 #!/bin/python3
-import sys, curses
+import sys, curses, os.path
 
 #with possible inspiration from:
 #https://github.com/maksimKorzh/code/blob/master/code.py
@@ -48,14 +48,17 @@ class TEditor:
         def open_file(self,filename):
             self.reset()
             try:
+                if not os.path.isfile(filename):
+                    with open(filename, "w") as file:
+                        pass
                 with open(filename) as f:
                     content = f.read().split('\n')
                     for row in content:
                         self.buff.append([ord(c) for c in row])
                 self.filename = filename
             except:
-                sys.exit(1)
                 print("error in opening Files")
+                sys.exit(1)
 
 
         def new_file(self):
@@ -87,10 +90,12 @@ class TEditor:
                 self.currentFile.screenLineNum += 1
     
     def get_line_begin(self, num):
+        if num == -1:
+            return "    |"
         strVersion = str(abs(num) % 1000)
         while len(strVersion) < 3:
             strVersion += " "
-        strVersion += ": "
+        strVersion += " |"
         return strVersion
 
     def refresh_display(self):
@@ -118,7 +123,7 @@ class TEditor:
                 if subLine == 0:
                     self.stdscr.addstr(termIndex, 0, self.get_line_begin(index) + "".join([chr(x) for x in self.currentFile.buff[index][subLine * WIDTH: (subLine+1) * WIDTH]]))
                 else:
-                    self.stdscr.addstr(termIndex, 5, "".join([chr(x) for x in self.currentFile.buff[index][subLine * WIDTH: (subLine+1) * WIDTH]]))
+                    self.stdscr.addstr(termIndex, 0, self.get_line_begin(-1) + "".join([chr(x) for x in self.currentFile.buff[index][subLine * WIDTH: (subLine+1) * WIDTH]]))
                 
                 if self.currentFile.cursy == index:
                     if subLine * WIDTH <= self.currentFile.cursx < (subLine + 1) * WIDTH:
@@ -131,6 +136,13 @@ class TEditor:
                 termIndex += 1
             index += 1
         self.stdscr.move(*move_cursor_to)
+
+        #for row, line in enumerate(self.currentFile.buff):
+        #    if row < HEIGHT:
+        #        self.stdscr.addstr(row, 0, "".join([chr(x) for x in line]))
+        #for row, line in enumerate(self.currentFile.buff):
+            
+        #self.stdscr.move(2,174)
 
     def insert_ord_char(self,char):
         self.currentFile.buff[self.currentFile.cursy].insert(self.currentFile.cursx,char)
@@ -190,14 +202,23 @@ class TEditor:
         self.currentFile.cursx = 0
 
     def user_input(self):
+        parthesis_end = {ord(x[0]):ord(x[1]) for x in {"{}", "[]", "()"}}
+
         k = self.stdscr.getch()
         def ctrl(k): return ((k) & 0x1f)
-        if k == ord("q"): sys.exit(0)
+        if k == ctrl(ord("s")): self.currentFile.save()
         elif k == ctrl(ord("k")): sys.exit(0)
+        elif k == 9: [self.insert_ord_char(ord(' ')) for i in range(4)]
+        elif k == ctrl(ord("a")): [self.move_cursor(curses.KEY_LEFT) for x in range(4)]
         elif k == curses.KEY_BACKSPACE: self.delete_char()
         elif k == ord("\n"): self.insert_line()
         elif k in {curses.KEY_DOWN,curses.KEY_UP,curses.KEY_RIGHT,curses.KEY_LEFT}: self.move_cursor(k)
         elif ctrl(k) != k: self.insert_ord_char(k)
+
+        if k in parthesis_end:
+            self.insert_ord_char(parthesis_end[k])
+            self.move_cursor(curses.KEY_LEFT)
+
 
     def main_loop(self):
         self.refresh_display()
@@ -215,6 +236,7 @@ class TEditor:
         while True: self.main_loop()
 
 def main(stdscr):
+    curses.raw()
     t = TEditor()
     t.run(stdscr)
 
