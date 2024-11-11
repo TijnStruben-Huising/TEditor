@@ -71,7 +71,8 @@ class TEditor:
     def __init__(self):
         self.currentFile = TEditor.File()
         self.stdscr = None
-        curses.init_pair(1,0,1);curses.init_pair(2,2,4);curses.init_pair(3,3,4)
+        #curses.use_default_colors()
+        curses.init_pair(1,5,4);curses.init_pair(2,2,4);curses.init_pair(3,3,4)
         self.colors = {"Selected":curses.color_pair(1),"GREEN":curses.color_pair(2),"BLUE":curses.color_pair(3)}
         self.mode = 1 #1 is normal #2 is select #3 is edit #4 is command
         self._tempSelect = None
@@ -104,11 +105,13 @@ class TEditor:
         return strVersion
 
     def get_selected(self,y):
-        def trunc_to_line(self,y):
-            currentBest = None
+        def trunc_to_line(y):
+            currentBest = []
             for selection in self.currentFile.selected:
                 if selection == y:
-                    return (0, len(self.currentFile.buff[y]))
+                    currentBest.append((0, len(self.currentFile.buff[y])))
+                if isinstance(selection, int):
+                    pass
                 elif selection[0][0] <= y and selection[1][0] >= y: #encompases
                     if selection[0][0] < y:
                         xbegin = 0
@@ -118,22 +121,23 @@ class TEditor:
                         xend = len(self.currentFile.buff[y])
                     else:
                         xend = selection[1][1]
-                    if currentBest == None:
-                        currentBest = [(xbegin,xend)]
-                    else:
-                        currentBest.append((xbegin,xend))
+                    currentBest.append((xbegin,xend))
                 else:
                     pass
             return currentBest
-        truncked = self.trunc_to_line(y)
+
+        truncked = trunc_to_line(y) #redo, all is erronated code
         ret = []
+        if truncked == []:
+            return ret
         for part in truncked:
             index = 0
             while index <= len(ret):
                 if index == len(ret):
                     ret.append(part)
                     break
-                elif ret[index][0] <= part[0] <= ret[index][1] or ret[index][0] <= part[1] <= ret[index][1]:
+                
+                elif ret[index][0] <= part[0] <= ret[index][1] or ret[index][0] <= part[1] <= ret[index][1] or part[0] <= ret[index][0] <= part[1] or part[0] <= ret[index][1] <= part[1]:
                     ret[index] = (min(ret[index][0],part[0]), max(ret[index][1],part[1]))
                     break
                 else:
@@ -161,17 +165,36 @@ class TEditor:
             lineSelection = self.get_selected(index)
 
             for subLine in range(self.currentFile.lineSizes[index]):
-
                 if termIndex + subLine >= HEIGHT:
                     break
 
 
+                applicableParts = []
+                for part in lineSelection:
+                    if part[0] <= subLine * WIDTH <= part[1] or part[0] <= ((subLine+1) * WIDTH - 1) <= part[1] or ((subLine) * WIDTH) <= part[0] <= ((subLine+1) * WIDTH - 1) or ((subLine) * WIDTH) <= part[1] <= ((subLine+1) * WIDTH - 1):
+                        applicableParts.append((max(part[0],subLine * WIDTH), min(part[1],(subLine + 1) * WIDTH)))
+
                 if subLine == 0:
-                    self.stdscr.addstr(termIndex, 0, self.get_line_begin(index) + "".join([chr(x) for x in self.currentFile.buff[index][subLine * WIDTH: (subLine+1) * WIDTH]]))
+                    self.stdscr.addstr(termIndex, 0, self.get_line_begin(index))
                 else:
-                    curses.init_color(1,1000,1000,1000)
-                    self.stdscr.addstr(termIndex, 0, self.get_line_begin(-1) + "".join([chr(x) for x in self.currentFile.buff[index][subLine * WIDTH: (subLine+1) * WIDTH]]))
-                
+                    self.stdscr.addstr(termIndex, 0, self.get_line_begin(-1))
+                lastApplication = subLine * WIDTH
+                if len(applicableParts) >= 2:
+                    sys.exit(1)
+                for part in applicableParts:
+                    if lastApplication < part[0]:
+                        #self.stdscr.addstr(termIndex, 5, str((part[0],part[1],lastApplication)))
+                        self.stdscr.addstr(termIndex, lastApplication + 5 - subLine * WIDTH, "".join([chr(x) for x in self.currentFile.buff[index][lastApplication:part[0]]]))
+                        lastApplication = part[0]
+                        #sys.exit(1)
+                    if lastApplication < part[1]:
+                        #self.stdscr.addstr(termIndex, 5, str((part[0],part[1],lastApplication)))
+                        self.stdscr.addstr(termIndex, lastApplication + 5 - subLine * WIDTH, "".join([chr(x) for x in self.currentFile.buff[index][lastApplication:part[1]]]),self.colors["Selected"])
+                        lastApplication = part[1]
+                if lastApplication < (subLine+1) * WIDTH:
+                    self.stdscr.addstr(termIndex, lastApplication + 5 - subLine * WIDTH, "".join([chr(x) for x in self.currentFile.buff[index][lastApplication: (subLine+1) * WIDTH]]))
+                    #pass
+
                 if self.currentFile.cursy == index:
                     if subLine * WIDTH <= self.currentFile.cursx < (subLine + 1) * WIDTH:
                         #assert (termIndex,self.currentFile.cursx - subLine * WIDTH) == (0,0), (termIndex,self.currentFile.cursx - subLine * WIDTH)
@@ -292,10 +315,11 @@ class TEditor:
             if k in {curses.KEY_DOWN,curses.KEY_UP,curses.KEY_RIGHT,curses.KEY_LEFT}: self.move_cursor(k)
             if k == 32: #space
                 if self._tempSelect == None:
-                    self._tempSelect == (self.currentFile.cursy,self.currentFile.cursx)
+                    self._tempSelect = (self.currentFile.cursy,self.currentFile.cursx)
                 elif self._tempSelect == (self.currentFile.cursy,self.currentFile.cursx):
-                    self.currentFile.selected[self.currentFile.cursy] == True #can add ceveral types later on
+                    self.currentFile.selected[self.currentFile.cursy] = True #can add ceveral types later on
                     self._tempSelect = None
+                    #sys.exit(1)
                 else:
                     if self._tempSelect[0] < self.currentFile.cursy:
                         self.currentFile.selected[(self._tempSelect,(self.currentFile.cursy,self.currentFile.cursx))] = True
@@ -306,6 +330,12 @@ class TEditor:
                             self.currentFile.selected[((self.currentFile.cursy,self.currentFile.cursx),self._tempSelect)] = True
                     else:
                         self.currentFile.selected[((self.currentFile.cursy,self.currentFile.cursx),self._tempSelect)] = True
+                    self._tempSelect = None
+                    #sys.exit(0)
+#                try:
+#                    curses.endwin()
+#                except:
+#                    print(self._tempSelect(),self.currentFile.selected)
 
             
             if k == 27: #esc
@@ -350,4 +380,3 @@ def main(stdscr):
 
 if __name__ == "__main__":
     curses.wrapper(main)
-
